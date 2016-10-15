@@ -3,53 +3,79 @@ package com.cadastro.projeto.maquinadeguerra;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothSocket;
+import android.util.Log;
 
 import java.io.IOException;
+import java.util.UUID;
 
 /**
  * Created by leobo on 10/12/2016.
  */
 public class ConnectThread extends Thread {
-    public static final java.util.UUID MY_UUID = null;
-    private final BluetoothSocket mmSocket;
-    private final BluetoothDevice mmDevice;
+
+    private static final String TAG = ConnectThread.class.getName();
+    private static final UUID MY_UUID = UUID.fromString("00001101-0000-1000-8000-00805f9b34fb");
+    private BluetoothSocket mmSocket;;
+
+    private final BluetoothDevice device;
 
     public ConnectThread(BluetoothDevice device) {
-        // Usa um objeto temporário, depois atribuído a mmSocket,
-        // uma vez que mmSocket é final
-        BluetoothSocket tmp = null; mmDevice = device;
-
-        // Usa BluetoothSocket para se conectar a um determinado BluetoothDevice
-        try {
-            // MY_UUID é a string UUID da aplicação, também utilizado do lado servidor
-            tmp = device.createRfcommSocketToServiceRecord(MY_UUID);
-        } catch (IOException e) {
-
-        }
-
-        mmSocket = tmp;
+        this.device = device;
     }
 
     public void run() {
         // Cancela a descoberta, pois atrasa a conexão
         BluetoothAdapter.getDefaultAdapter().cancelDiscovery();
+
+        // Usa BluetoothSocket para se conectar a um determinado BluetoothDevice
         try {
-            // Conecta o dispositivo através do socket. Irá bloquear até que a conexão seja efetivada
-            // ou lance uma exceção
-            mmSocket.connect();
-        } catch (IOException connectException) {
-            // Impossível conectar; feche a aplicação e saia
+            // MY_UUID é a string UUID da aplicação, também utilizado do lado servidor
+            mmSocket = device.createRfcommSocketToServiceRecord(MY_UUID);
+            Log.e(TAG, "Socket criado com sucesso");
+
             try {
-                mmSocket.close();
-            } catch (IOException closeException) {
+                // Conecta o dispositivo através do socket. Irá bloquear até que a conexão seja efetivada ou lance uma exceção
+                mmSocket.connect();
+                Log.e(TAG, "Conexão estabelecida com sucesso");
+
+                // Gerencia a conexão (em uma thread separada)
+                manageConnectedSocket(mmSocket);
+            } catch (IOException connectException) {
+                try {
+                    Log.e(TAG, "Tentando fallback...");
+
+                    mmSocket =(BluetoothSocket) device.getClass().getMethod("createRfcommSocket", new Class[] {Integer.TYPE}).invoke(device,1);
+                    mmSocket.connect();
+                    Log.e(TAG, "Conexão estabelecida com sucesso");
+                    //mmSocket.isConnected()
+                    // Gerencia a conexão (em uma thread separada)
+                    manageConnectedSocket(mmSocket);
+                } catch (Exception e2) {
+                    Log.e(TAG, "Não foi possível estabelecer uma conexão");
+                }
             }
-            return;
+        } catch (IOException e) {
+            Log.e(TAG, "Erro criando socket");
         }
-        // Gerencia a conexão (em uma thread separada)
-        manageConnectedSocket(mmSocket);
     }
 
-    private void manageConnectedSocket(BluetoothSocket mmSocket) {
+    /**
+     * Fecha o socket de conexão
+     */
+    public void cancel() {
+        try {
+            if (mmSocket != null && mmSocket.isConnected()) {
+                mmSocket.close();
+            }
+        } catch (IOException e) { }
+    }
 
+    /**
+     * Cria uma thread para consumo e envio de dados
+     * @param mmSocket BluetoothSocket
+     */
+    private void manageConnectedSocket(BluetoothSocket mmSocket) {
+        ConnectedThread connectedThread = new ConnectedThread(mmSocket);
+        connectedThread.start();
     }
 }
