@@ -49,12 +49,11 @@ public class MainActivity extends AppCompatActivity {
     private ConnectedThread connectedThread;
 
     private Handler mHandler = new Handler(){
-
         private final String TAG = Handler.class.getName();
 
         @Override
         public void handleMessage(Message msg) {
-            Log.i(TAG, "in handler");
+            Log.i(TAG, "in handler, what: " + msg.what);
             super.handleMessage(msg);
 
             switch(msg.what){
@@ -179,11 +178,10 @@ public class MainActivity extends AppCompatActivity {
         } else {
             BluetoothDevice carrinho  = findDeviceInSet(pairedDevices);
 
-            if (carrinho != null) {
-                createListViewCarrinho(carrinho);
-
-            } else {
+            if (carrinho == null) {
                 finishApp("É preciso parear o carrinho para utilizar o aplicativo.");
+            } else {
+                createListViewCarrinho(carrinho);
             }
         }
     }
@@ -193,7 +191,7 @@ public class MainActivity extends AppCompatActivity {
      * @param carrinho BluetoothDevice
      */
     private void createListViewCarrinho(final BluetoothDevice carrinho) {
-        ArrayAdapter<String> dispositivosAdapter = new ArrayAdapter<String>(this, android.R.layout.simple_list_item_1);
+        ArrayAdapter<String> dispositivosAdapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1);
         dispositivosAdapter.add(carrinho.getName() + "\n" + carrinho.getAddress());
 
         ListView listViewDispositivos = (ListView) findViewById(R.id.listViewBluetoothDispositivos);
@@ -229,10 +227,9 @@ public class MainActivity extends AppCompatActivity {
 
         private final String TAG = ConnectThread.class.getName();
         private final UUID MY_UUID = UUID.fromString("00001101-0000-1000-8000-00805f9b34fb");
-
         private final BluetoothDevice device;
 
-        private BluetoothSocket mmSocket;;
+        private BluetoothSocket mmSocket;
 
         public ConnectThread(BluetoothDevice device) {
             this.device = device;
