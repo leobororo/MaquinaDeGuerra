@@ -39,16 +39,14 @@ import static java.lang.System.arraycopy;
 public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = MainActivity.class.getName();
-
     private static final String MAC_ADDRESS = "98:D3:31:FD:29:75";
-    private final static int REQUEST_ENABLE_BT = 1;
-    private static final int MESSAGE_READ = 1;
 
+    private static final int REQUEST_ENABLE_BT = 1;
+    private static final int MESSAGE_READ = 1;
     private static final int SUCCESS_CONNECT = 0;
 
     private BluetoothAdapter mBluetoothAdapter;
     private ConnectedThread connectedThread;
-    private ListView listViewDispositivos;
 
     private Handler mHandler = new Handler(){
 
@@ -161,7 +159,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     * Redirects user to the home screen
+     * Redireciona para a tela inicial do dispositivo
      */
     private void goToHomeScreen() {
         Intent intent = new Intent(ACTION_MAIN);
@@ -195,11 +193,11 @@ public class MainActivity extends AppCompatActivity {
      * @param carrinho BluetoothDevice
      */
     private void createListViewCarrinho(final BluetoothDevice carrinho) {
-        listViewDispositivos = (ListView) findViewById(R.id.listViewBluetoothDispositivos);
         ArrayAdapter<String> dispositivosAdapter = new ArrayAdapter<String>(this, android.R.layout.simple_list_item_1);
         dispositivosAdapter.add(carrinho.getName() + "\n" + carrinho.getAddress());
-        listViewDispositivos.setAdapter(dispositivosAdapter);
 
+        ListView listViewDispositivos = (ListView) findViewById(R.id.listViewBluetoothDispositivos);
+        listViewDispositivos.setAdapter(dispositivosAdapter);
         listViewDispositivos.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
             public void onItemClick(AdapterView<?> adapterView, View view, int i, long l) {
