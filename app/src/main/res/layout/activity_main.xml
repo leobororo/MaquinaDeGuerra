@@ -8,36 +8,87 @@
     android:paddingLeft="@dimen/activity_horizontal_margin"
     android:paddingRight="@dimen/activity_horizontal_margin"
     android:paddingTop="@dimen/activity_vertical_margin"
-    tools:context="com.cadastro.projeto.maquinadeguerra.MainActivity">
+    tools:context="com.cadastro.projeto.maquinadeguerra.MainActivity"
+    android:weightSum="1">
 
     <ListView
         android:layout_width="match_parent"
-        android:layout_height="257dp"
+        android:layout_height="38dp"
         android:id="@+id/listViewBluetoothDispositivos"
-        android:choiceMode="singleChoice" />
+        android:choiceMode="singleChoice"
+        android:layout_weight="0.08" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Intensidade de luz"
+        android:id="@+id/textView" />
 
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:textSize="18dp"
-        android:id="@+id/sensorLCD"/>
+        android:id="@+id/sensorLCD"
+        android:autoText="false"
+        android:enabled="false"
+        android:focusable="false"
+        android:forceHasOverlappingRendering="false" />
 
-    <Button
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Forward"
-        android:id="@+id/btnF" />
+    <ImageView
+        android:layout_width="145dp"
+        android:layout_height="95dp"
+        android:id="@+id/ivIntLuz"
+        android:layout_gravity="center_horizontal"
+        android:src="@drawable/ic_dia"
+        android:layout_weight="0.20" />
 
-    <Button
-        android:layout_width="wrap_content"
+    <FrameLayout
+        android:layout_width="fill_parent"
         android:layout_height="wrap_content"
-        android:text="Backward"
-        android:id="@+id/btnB" />
+        android:layout_weight="0.62">
 
-    <Button
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Stop"
-        android:id="@+id/btnS" />
+        <ImageView
+            android:layout_width="68dp"
+            android:layout_height="68dp"
+            android:id="@+id/ivE"
+            android:layout_gravity="left|center_vertical"
+            android:src="@drawable/ic_e" />
+
+        <ImageView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:id="@+id/ivD"
+            android:layout_gravity="right|center_vertical"
+            android:src="@drawable/ic_direita" />
+
+        <ImageView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:id="@+id/ivF"
+            android:layout_gravity="top|center"
+            android:src="@drawable/ic_f" />
+
+        <ImageButton
+            android:layout_width="44dp"
+            android:layout_height="42dp"
+            android:id="@+id/ivS"
+            android:layout_gravity="center"
+            android:src="@drawable/ic_s" />
+
+        <ImageView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:id="@+id/ivB"
+            android:layout_gravity="center_horizontal|bottom"
+            android:src="@drawable/ic_b" />
+
+        <ImageView
+            android:layout_width="54dp"
+            android:layout_height="54dp"
+            android:id="@+id/ivFalar"
+            android:layout_gravity="right|bottom"
+            android:src="@drawable/ic_mic_black_24dp" />
+
+    </FrameLayout>
 
 </LinearLayout>
