@@ -27,11 +27,12 @@
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:textSize="18dp"
+        android:textSize="40dp"
         android:id="@+id/sensorLCD"
-        android:autoText="false"
         android:enabled="false"
         android:focusable="false"
+
+
         android:forceHasOverlappingRendering="false" />
 
     <ImageView
@@ -89,6 +90,12 @@
             android:layout_gravity="right|bottom"
             android:src="@drawable/ic_mic_black_24dp" />
 
+        <ImageView
+            android:layout_width="54dp"
+            android:layout_height="54dp"
+            android:id="@+id/ivAtivaVoz"
+            android:layout_gravity="left|bottom"
+            android:src="@drawable/ic_volume_ativado" />
     </FrameLayout>
 
 </LinearLayout>

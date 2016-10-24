@@ -14,6 +14,7 @@ import android.speech.tts.TextToSpeech;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.MotionEvent;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
@@ -21,6 +22,9 @@ import android.widget.ImageView;
 import android.widget.ListView;
 import android.widget.TextView;
 import android.widget.Toast;
+
+import com.cadastro.projeto.maquinadeguerra.Utilitarios.ConverterTextoVoz;
+import com.cadastro.projeto.maquinadeguerra.Utilitarios.TextoMensagemVoz;
 import com.google.android.gms.appindexing.Action;
 import com.google.android.gms.appindexing.AppIndex;
 import com.google.android.gms.common.api.GoogleApiClient;
@@ -64,11 +68,11 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
     /* /\ Realizada por LRSILVA
     //Criado para não ficar alterando a imagem toda hora
     */
-    boolean alterouImagen = false;
+    //boolean alterouImagen = false;
 
     /* /\ Realizada por LRSILVA
     * Gerenciar a visibilidade dos componentes em visível e não visivel.
-    * quando desconectado, invisível e conectado visível.
+    *Quando desconectado os itens abaixo ficam invisível e ao conectado visível.
     */
     private ImageView btnF = null;
     private ImageView btnB = null;
@@ -77,7 +81,17 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
     private ImageView btnD = null;
     private ImageView falar = null;
     private ImageView ivIntLuz = null;
+    private ImageView ivAtivaVoz = null;
+    // /\
 
+    // /\ Criada para não ficar alterando a imagem toda hora
+    private String ultimaImagem = "Dia";
+    // /\
+
+    // \/ Gerenciamento do app para conversar com o usuário
+    private TextToSpeech mTts = null;
+    private boolean ativaFalar = true;
+    // /\
     private Handler mHandler = new Handler() {
         private final String TAG = Handler.class.getName();
 
@@ -94,14 +108,15 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
                     connectedThread.start();
                     ListView listView = (ListView) findViewById(R.id.listViewBluetoothDispositivos);
                     listView.setVisibility(View.GONE);
-                     // Realizada por LRSILVA. Ativar componentes
+                    // Realizada por LRSILVA. Ativar componentes
+                    ConverterTextoVoz.texto(TextoMensagemVoz.FN_BEM_VINDO,mTts,ativaFalar);
                     ativaAposConectar(true);
                     break;
                 case MESSAGE_READ:
                     //atualiza o valor retornado pelo sensor na tela
                     String string = (String) msg.obj;
                     TextView view = (TextView) findViewById(R.id.sensorLCD);
-                    // Realizada por LRSILVA. alterar a imagen de cor
+                    // Realizada por LRSILVA. Alterar a imagem de acondo com a intensidade e luz.
                     verificarPeriodoDia((String) view.getText());
                     view.setText(string);
 
@@ -120,8 +135,7 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-
-
+        mTts = new TextToSpeech(this, this);
         obtainBluetoothAdapter();
         enableBluetoothAdapterAndProgress();
         btnF = (ImageView) findViewById(R.id.ivF);
@@ -131,6 +145,9 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
         btnD = (ImageView) findViewById(R.id.ivD);
 
         falar = (ImageView) findViewById(R.id.ivFalar);
+
+        ivAtivaVoz = (ImageView) findViewById(R.id.ivAtivaVoz);
+
         ivIntLuz = (ImageView) findViewById(R.id.ivIntLuz);
         ativaAposConectar(false);
         setButtons();
@@ -152,19 +169,49 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
      * Configura as mensagens que serão enviadas ao clicar nos botões
      */
     private void setButtons() {
-       // ImageView btnF = (ImageView) findViewById(R.id.ivF);
-        btnF.setOnClickListener(new View.OnClickListener() {
-                    @Override
-                    public void onClick(View view) {
-                        connectedThread.write('F');
+        // ImageView btnF = (ImageView) findViewById(R.id.ivF);
+        ConverterTextoVoz.texto(TextoMensagemVoz.FN_BEM_VINDO,mTts,ativaFalar);
+        // btnF.setOnClickListener(new View.OnClickListener() {
+        //     @Override
+        //   public void onClick(View view) {
+        //       frente();
+        //   }
+        //});
+
+        //Mudança de envento para o carrinho receber os comandos emquanto tiver selecionado. "setOnTouchListener"
+        //Estava dificil de controlar o app com o evento on clique.
+
+        btnF.setOnTouchListener(new View.OnTouchListener() {
+            @Override
+            public boolean onTouch(View v, MotionEvent event) {
+                switch (event.getAction()){
+                    case MotionEvent.ACTION_DOWN:
+                        frente();
+                        return true;
+                    //break;
+                    case MotionEvent.ACTION_UP:
+                        connectedThread.write('S');
+                        break;
+                }
+                return false;
             }
         });
 
+
         //ImageView btnB = (ImageView) findViewById(R.id.ivB);
-        btnB.setOnClickListener(new View.OnClickListener() {
+        btnB.setOnTouchListener(new View.OnTouchListener() {
             @Override
-            public void onClick(View view) {
-                connectedThread.write('B');
+            public boolean onTouch(View v, MotionEvent event) {
+                switch (event.getAction()){
+                    case MotionEvent.ACTION_DOWN:
+                        traz();
+                        return true;
+                    //break;
+                    case MotionEvent.ACTION_UP:
+                        connectedThread.write('S');
+                        break;
+                }
+                return false;
             }
         });
 
@@ -178,9 +225,51 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
         //ImageView falar = (ImageView) findViewById(R.id.ivFalar);
         falar.setOnClickListener(new View.OnClickListener() {
             @Override
-            public void onClick(View view) {
+            public void onClick(View view) {startVoiceRecognitionActivity();
+            }
+        });
 
-                startVoiceRecognitionActivity();
+        btnD.setOnTouchListener(new View.OnTouchListener() {
+            @Override
+            public boolean onTouch(View v, MotionEvent event) {
+                switch (event.getAction()){
+                    case MotionEvent.ACTION_DOWN:
+                        direita();
+                        return true;
+                    //break;
+                    case MotionEvent.ACTION_UP:
+                        connectedThread.write('S');
+                        break;
+                }
+                return false;
+            }
+        });
+        btnE.setOnTouchListener(new View.OnTouchListener() {
+            @Override
+            public boolean onTouch(View v, MotionEvent event) {
+                switch (event.getAction()){
+                    case MotionEvent.ACTION_DOWN:
+                        esquerda();
+                        return true;
+                    //break;
+                    case MotionEvent.ACTION_UP:
+                        connectedThread.write('S');
+                        break;
+                }
+                return false;
+            }
+        });
+        ivAtivaVoz.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                if (ativaFalar){
+                    ativaFalar = false;
+                    ivAtivaVoz.setImageResource(R.drawable.ic_volume_desativado);
+                }else
+                {
+                    ativaFalar = true;
+                    ivAtivaVoz.setImageResource(R.drawable.ic_volume_ativado);
+                }
             }
         });
     }
@@ -233,27 +322,39 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
 
             for(int i = 0; i < matches.size();i++) {
                 if(matches.get(i).equalsIgnoreCase("Conectar")) {
+                    ConverterTextoVoz.texto(TextoMensagemVoz.FN_CONECTANDO,mTts,ativaFalar);
                     ConnectThread connectThread = new ConnectThread(carrinho);
                     connectThread.start();
                     break;
                 }
                 if(matches.get(i).equalsIgnoreCase("em frente")) {
-                    connectedThread.write('B');
+                    frente();
 
                     break;
                 }
-                if(matches.get(i).equalsIgnoreCase("para tras")) {
-                    connectedThread.write('F');
+                if(matches.get(i).equalsIgnoreCase("para traz")) {
+                    traz();
+
                     break;
                 }
                 if(matches.get(i).equalsIgnoreCase("parar")) {
                     connectedThread.write('S');
+
+                    break;
+                }
+                if(matches.get(i).equalsIgnoreCase("direita")) {
+                    direita();
+                    break;
+                }
+                if(matches.get(i).equalsIgnoreCase("esquerda")) {
+                    esquerda();
                     break;
                 }
                 if(matches.get(i).equalsIgnoreCase("sair")) {
                     this.finish();
                     break;
                 }
+
 
             }
         }
@@ -295,6 +396,7 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
      * @param carrinho BluetoothDevice
      */
     private void createListViewCarrinho(final BluetoothDevice carrinho) {
+
         ArrayAdapter<String> dispositivosAdapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1);
         dispositivosAdapter.add(carrinho.getName() + "\n" + carrinho.getAddress());
 
@@ -303,6 +405,7 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
         listViewDispositivos.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
             public void onItemClick(AdapterView<?> adapterView, View view, int i, long l) {
+                ConverterTextoVoz.texto(TextoMensagemVoz.FN_CONECTANDO,mTts,ativaFalar);
                 ConnectThread connectThread = new ConnectThread(carrinho);
                 connectThread.start();
             }
@@ -414,6 +517,7 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
                         manageConnectedSocket(mmSocket);
                     } catch (Exception connectException2) {
                         Log.e(TAG, "Não foi possível estabelecer uma conexão");
+                        ConverterTextoVoz.texto(TextoMensagemVoz.ERRO_CONECTAR_CARRINHO,mTts,ativaFalar);
                     }
                 }
             } catch (IOException e) {
@@ -515,7 +619,7 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
     private void startVoiceRecognitionActivity() {
         Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
         intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
-        intent.putExtra(RecognizerIntent.EXTRA_PROMPT, "Fala para a Máquina de Quera o que fazer!!!");
+        intent.putExtra(RecognizerIntent.EXTRA_PROMPT, "Fala para a Máquina de guera o que fazer!!!");
         startActivityForResult(intent, REQUEST_CODE);
     }
 
@@ -524,30 +628,34 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
         if (valor != "") {
             int intansidade = Integer.valueOf(valor);
             ImageView ivIntLuz = (ImageView) findViewById(R.id.ivIntLuz);
-            if (intansidade < 700 ) {
-                if (alterouImagen) {
+
+            if (intansidade < 600 ) {
+                if (!ultimaImagem.equals("Dia")) {
                     ivIntLuz.setImageResource(R.drawable.ic_dia);
-                    alterouImagen = false;
-
+                    ultimaImagem = "Dia";
                 }
+
             }else
-            if (intansidade > 700 )
+            if (intansidade > 600 )
                 if (intansidade < 1000) {
-                ivIntLuz.setImageResource(R.drawable.ic_tarde);
-                alterouImagen = true;
-            } else {
-                if (intansidade >= 1000) {
-                    ivIntLuz.setImageResource(R.drawable.ic_noite);
-                    alterouImagen = true;
-
+                    if (!ultimaImagem.equals("Tarde")) {
+                        ivIntLuz.setImageResource(R.drawable.ic_tarde);
+                        ultimaImagem = "Tarde";
+                    }
+                } else {
+                    if (intansidade >= 1000) {
+                        if (!ultimaImagem.equals("Noite")) {
+                            ivIntLuz.setImageResource(R.drawable.ic_noite);
+                            ultimaImagem = "Noite";
+                        }
+                    }
                 }
-                }
 
-            }
-
+        }
     }
+    //Tornar os componentes visíveis ao conectar
     private void ativaAposConectar(boolean conectado){
-        /*
+
         if (!conectado) {
             btnF.setVisibility(View.INVISIBLE);
             btnB.setVisibility(View.INVISIBLE);
@@ -555,7 +663,7 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
             btnE.setVisibility(View.INVISIBLE);
             btnD.setVisibility(View.INVISIBLE);
             //falar.setVisibility(View.INVISIBLE);
-           ivIntLuz.setVisibility(View.INVISIBLE);
+            ivIntLuz.setVisibility(View.INVISIBLE);
         }else {
             btnF.setVisibility(View.VISIBLE);
             btnB.setVisibility(View.VISIBLE);
@@ -566,7 +674,30 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
             //falar.setVisibility(View.VISIBLE);
             ivIntLuz.setVisibility(View.VISIBLE);
         }
-        */
+
 
     }
+
+    //Comandos para gerencias a direção do carriho
+    private void frente(){
+        ConverterTextoVoz.texto(TextoMensagemVoz.FN_FRENTE,mTts,ativaFalar);
+        connectedThread.write('F');
+    }
+    //Comandos para gerencias a direção do carriho
+    private void traz(){
+        connectedThread.write('B');
+        ConverterTextoVoz.texto(TextoMensagemVoz.FN_RE,mTts,ativaFalar);
+    }
+    //Comandos para gerencias a direção do carriho
+    private void direita(){
+        connectedThread.write('R');
+        ConverterTextoVoz.texto(TextoMensagemVoz.FN_DIREITA,mTts,ativaFalar);
+    }
+    //Comandos para gerencias a direção do carriho
+    private void esquerda(){
+        connectedThread.write('L');
+        ConverterTextoVoz.texto(TextoMensagemVoz.FN_ESQUERDA,mTts,ativaFalar);
+    }
+
+
 }
