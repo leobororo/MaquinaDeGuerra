@@ -4,9 +4,7 @@ import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothSocket;
 import android.content.Intent;
-import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
-import android.net.Uri;
 import android.os.Handler;
 import android.os.Message;
 import android.speech.RecognizerIntent;
@@ -21,13 +19,10 @@ import android.widget.ArrayAdapter;
 import android.widget.ImageView;
 import android.widget.ListView;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import com.cadastro.projeto.maquinadeguerra.Utilitarios.ConverterTextoVoz;
 import com.cadastro.projeto.maquinadeguerra.Utilitarios.TextoMensagemVoz;
-import com.google.android.gms.appindexing.Action;
-import com.google.android.gms.appindexing.AppIndex;
-import com.google.android.gms.common.api.GoogleApiClient;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
@@ -43,80 +38,116 @@ import static android.bluetooth.BluetoothAdapter.ACTION_REQUEST_ENABLE;
 import static android.content.Intent.ACTION_MAIN;
 import static android.content.Intent.CATEGORY_HOME;
 import static android.content.Intent.FLAG_ACTIVITY_NEW_TASK;
+import static android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH;
+import static android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL;
+import static android.speech.RecognizerIntent.EXTRA_PROMPT;
+import static android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM;
+import static android.view.MotionEvent.ACTION_DOWN;
+import static android.view.MotionEvent.ACTION_UP;
+import static android.view.View.INVISIBLE;
+import static android.view.View.VISIBLE;
+import static android.widget.Toast.LENGTH_LONG;
 import static android.widget.Toast.LENGTH_SHORT;
 import static android.widget.Toast.makeText;
+import static com.cadastro.projeto.maquinadeguerra.Utilitarios.TextoMensagemVoz.MENSAGEM_VOZ_BEM_VINDO;
+import static com.cadastro.projeto.maquinadeguerra.Utilitarios.TextoMensagemVoz.MENSAGEM_VOZ_IR_PARA_DIREITA;
+import static com.cadastro.projeto.maquinadeguerra.Utilitarios.TextoMensagemVoz.MENSAGEM_VOZ_IR_PARA_ESQUERDA;
+import static com.cadastro.projeto.maquinadeguerra.Utilitarios.TextoMensagemVoz.MENSAGEM_VOZ_IR_PARA_FRENTE;
+import static com.cadastro.projeto.maquinadeguerra.Utilitarios.TextoMensagemVoz.MENSAGEM_VOZ_IR_PARA_TRAS;
+
 public class MainActivity extends AppCompatActivity implements TextToSpeech.OnInitListener {
 
     private static final String TAG = MainActivity.class.getName();
+
+    // MAC address do carrinho
     private static final String MAC_ADDRESS = "98:D3:31:FD:29:75";
-    private static final int REQUEST_ENABLE_BT = 1;
+
+    // constantes para controle de activities for result
+    private static final int REQUEST_ENABLE_BLUETOOTH = 1;
+    private static final int REQUEST_VOICE_CONTROL = 1234;
+
+    // constantes para controle de mensagens enviadas para o Handler
     private static final int MESSAGE_READ = 1;
     private static final int SUCCESS_CONNECT = 0;
 
+    // constantes para controle da imagem de feedback da intensidade de luz
+    private static final String DIA = "Dia";
+    private static final String TARDE = "Tarde";
+    private static final String NOITE = "Noite";
+
+    // constantes que representam mensagens que serão enviadas para o arduino
+    public static final char FORWARD_COMMAND = 'F';
+    public static final char BACKWARD_COMMAND = 'B';
+    public static final char RIGHT_COMMAND = 'R';
+    public static final char LEFT_COMMAND = 'L';
+    public static final char STOP_COMMAND = 'S';
+
+    // adapter do bluetooth
     private BluetoothAdapter mBluetoothAdapter;
-    private ConnectedThread connectedThread;
-    /* /\ Realizada por LRSILVA
-    *Adicionado para comando de voz
-    */
-    private static final int REQUEST_CODE = 1234;
 
-    /* /\ Realizada por LRSILVA
-    * Este atributo estava sendo iniciado dentro do metodo "progress" sendo atividao pelo ListView
-    * Para funcionar por comando de voz, declarei esta variavel aqui para ser utilizada pelos dois metodos
-    */
+    // dispositivo bluetooth do carrinho
     private BluetoothDevice carrinho;
-    /* /\ Realizada por LRSILVA
-    //Criado para não ficar alterando a imagem toda hora
-    */
-    //boolean alterouImagen = false;
 
-    /* /\ Realizada por LRSILVA
-    * Gerenciar a visibilidade dos componentes em visível e não visivel.
-    *Quando desconectado os itens abaixo ficam invisível e ao conectado visível.
-    */
-    private ImageView btnF = null;
-    private ImageView btnB = null;
-    private ImageView btnS = null;
-    private ImageView btnE = null;
-    private ImageView btnD = null;
-    private ImageView falar = null;
-    private ImageView ivIntLuz = null;
-    private ImageView ivAtivaVoz = null;
-    // /\
+    // thread que mantém o socket de conexão via bluetooth
+    private ConnectedThread connectedThread;
 
-    // /\ Criada para não ficar alterando a imagem toda hora
-    private String ultimaImagem = "Dia";
-    // /\
+    // views utilizadas para comandos dos usuários
+    private ImageView forwardImageView = null;
+    private ImageView backwardImageView = null;
+    private ImageView stopImageView = null;
+    private ImageView leftImageView = null;
+    private ImageView rightImageView = null;
+    private ImageView speakImageView = null;
+    private ImageView lightIntensityImageView = null;
+    private ImageView voiceControlImageView = null;
 
-    // \/ Gerenciamento do app para conversar com o usuário
-    private TextToSpeech mTts = null;
-    private boolean ativaFalar = true;
-    // /\
+    // variável sentinela que guarda a última imagem
+    private String lastImage = DIA;
+
+    // engine para comunicação por voz proveniente do aplicativo
+    private TextToSpeech textToSpeech = null;
+
+    // variável sentinela que indica se o controle por voz está ativado ou não
+    private boolean voiceControlActive = true;
+
+    /**
+     * Handler que permite que as thread se comuniquem com a activity main
+     */
     private Handler mHandler = new Handler() {
         private final String TAG = Handler.class.getName();
 
         @Override
         public void handleMessage(Message msg) {
-            Log.i(TAG, "in handler, what: " + msg.what);
+            Log.i(TAG, "dentro do handler, what: " + msg.what);
             super.handleMessage(msg);
 
             switch (msg.what) {
                 case SUCCESS_CONNECT:
-                    // Cria e inicia a thread que tratará do envio e recebimento de mensagens
+
+                    // envia toast de conexão com sucesso
                     makeText(MainActivity.this, "Conectado com sucesso", LENGTH_SHORT).show();
+
+                    // cria e inicia a thread que tratará do envio e recebimento de mensagens
                     connectedThread = new ConnectedThread((BluetoothSocket) msg.obj);
                     connectedThread.start();
+
+                    // remove da tela a list view de carrinhos
                     ListView listView = (ListView) findViewById(R.id.listViewBluetoothDispositivos);
                     listView.setVisibility(View.GONE);
-                    // Realizada por LRSILVA. Ativar componentes
-                    ConverterTextoVoz.texto(TextoMensagemVoz.FN_BEM_VINDO,mTts,ativaFalar);
-                    ativaAposConectar(true);
+
+                    // dá boas vindas ao usuário
+                    ConverterTextoVoz.texto(MENSAGEM_VOZ_BEM_VINDO, textToSpeech, voiceControlActive);
+
+                    //Configura a visibilidade dos botões
+                    setButtonsVisibility(true);
+
                     break;
                 case MESSAGE_READ:
-                    //atualiza o valor retornado pelo sensor na tela
+                    // exibe na tela o valor retornado pelo sensor de luminosidade
                     String string = (String) msg.obj;
                     TextView view = (TextView) findViewById(R.id.sensorLCD);
-                    // Realizada por LRSILVA. Alterar a imagem de acondo com a intensidade e luz.
+
+                    // modifica a imagem de feedback de acordo com a intensidade da luz
                     verificarPeriodoDia((String) view.getText());
                     view.setText(string);
 
@@ -124,151 +155,143 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
             }
         }
     };
-    /**
-     * ATTENTION: This was auto-generated to implement the App Indexing API.
-     * See https://g.co/AppIndexing/AndroidStudio for more information.
-     */
-    private GoogleApiClient client;
-
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        mTts = new TextToSpeech(this, this);
+
+        textToSpeech = new TextToSpeech(this, this);
+
         obtainBluetoothAdapter();
+
         enableBluetoothAdapterAndProgress();
-        btnF = (ImageView) findViewById(R.id.ivF);
-        btnB = (ImageView) findViewById(R.id.ivB);
-        btnS = (ImageView) findViewById(R.id.ivS);
-        btnE = (ImageView) findViewById(R.id.ivE);
-        btnD = (ImageView) findViewById(R.id.ivD);
 
-        falar = (ImageView) findViewById(R.id.ivFalar);
+        obtainImageViewInstances();
 
-        ivAtivaVoz = (ImageView) findViewById(R.id.ivAtivaVoz);
+        setButtonsVisibility(false);
 
-        ivIntLuz = (ImageView) findViewById(R.id.ivIntLuz);
-        ativaAposConectar(false);
         setButtons();
 
-        PackageManager pm = getPackageManager();
-        List<ResolveInfo> activities = pm.queryIntentActivities(
-                new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH), 0);
-        if (activities.size() == 0) {
-            //speakButton.setEnabled(false);
-            Toast.makeText(getApplicationContext(), "Reconhecedor de voz nao encontrado", Toast.LENGTH_LONG).show();
-        }
+        verifyVoiceRecognizer();
+    }
 
-        // ATTENTION: This was auto-generated to implement the App Indexing API.
-        // See https://g.co/AppIndexing/AndroidStudio for more information.
-        client = new GoogleApiClient.Builder(this).addApi(AppIndex.API).build();
+    /**
+     * Verifica a presença da engine para reconhecimento de voz
+     */
+    private void verifyVoiceRecognizer() {
+        Intent recognizerIntent = new Intent(ACTION_RECOGNIZE_SPEECH);
+        List<ResolveInfo> activities = getPackageManager().queryIntentActivities(recognizerIntent, 0);
+
+        if (activities.size() == 0) {
+            makeText(getApplicationContext(), "Reconhecedor de voz nao encontrado", LENGTH_LONG).show();
+        }
     }
 
     /**
      * Configura as mensagens que serão enviadas ao clicar nos botões
      */
     private void setButtons() {
-        // ImageView btnF = (ImageView) findViewById(R.id.ivF);
-        ConverterTextoVoz.texto(TextoMensagemVoz.FN_BEM_VINDO,mTts,ativaFalar);
-        // btnF.setOnClickListener(new View.OnClickListener() {
-        //     @Override
-        //   public void onClick(View view) {
-        //       frente();
-        //   }
-        //});
+        ConverterTextoVoz.texto(MENSAGEM_VOZ_BEM_VINDO, textToSpeech, voiceControlActive);
 
-        //Mudança de envento para o carrinho receber os comandos emquanto tiver selecionado. "setOnTouchListener"
-        //Estava dificil de controlar o app com o evento on clique.
-
-        btnF.setOnTouchListener(new View.OnTouchListener() {
+        //configura evento da image view de comando para frente
+        forwardImageView.setOnTouchListener(new View.OnTouchListener() {
             @Override
             public boolean onTouch(View v, MotionEvent event) {
                 switch (event.getAction()){
-                    case MotionEvent.ACTION_DOWN:
-                        frente();
+                    case ACTION_DOWN:
+                        goForward();
                         return true;
-                    //break;
-                    case MotionEvent.ACTION_UP:
-                        connectedThread.write('S');
+
+                    case ACTION_UP:
+                        connectedThread.write(STOP_COMMAND);
                         break;
                 }
+
                 return false;
             }
         });
 
-
-        //ImageView btnB = (ImageView) findViewById(R.id.ivB);
-        btnB.setOnTouchListener(new View.OnTouchListener() {
+        //configura evento da image view de comando para trás
+        backwardImageView.setOnTouchListener(new View.OnTouchListener() {
             @Override
             public boolean onTouch(View v, MotionEvent event) {
                 switch (event.getAction()){
-                    case MotionEvent.ACTION_DOWN:
-                        traz();
+                    case ACTION_DOWN:
+                        goBackward();
                         return true;
-                    //break;
-                    case MotionEvent.ACTION_UP:
-                        connectedThread.write('S');
+
+                    case ACTION_UP:
+                        connectedThread.write(STOP_COMMAND);
                         break;
                 }
+
                 return false;
             }
         });
 
-        //ImageView btnS = (ImageView) findViewById(R.id.ivS);
-        btnS.setOnClickListener(new View.OnClickListener() {
+        //configura evento da image view de comando para direita
+        rightImageView.setOnTouchListener(new View.OnTouchListener() {
+            @Override
+            public boolean onTouch(View v, MotionEvent event) {
+                switch (event.getAction()){
+                    case ACTION_DOWN:
+                        goToTheRight();
+                        return true;
+
+                    case ACTION_UP:
+                        connectedThread.write(STOP_COMMAND);
+                        break;
+                }
+
+                return false;
+            }
+        });
+
+        //configura evento da image view de comando para esquerda
+        leftImageView.setOnTouchListener(new View.OnTouchListener() {
+            @Override
+            public boolean onTouch(View v, MotionEvent event) {
+                switch (event.getAction()){
+                    case ACTION_DOWN:
+                        goToTheLeft();
+                        return true;
+
+                    case ACTION_UP:
+                        connectedThread.write(STOP_COMMAND);
+                        break;
+                }
+
+                return false;
+            }
+        });
+
+        //configura evento da image view de comando parar
+        stopImageView.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                connectedThread.write('S');
-            }
-        });
-        //ImageView falar = (ImageView) findViewById(R.id.ivFalar);
-        falar.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {startVoiceRecognitionActivity();
+                connectedThread.write(STOP_COMMAND);
             }
         });
 
-        btnD.setOnTouchListener(new View.OnTouchListener() {
-            @Override
-            public boolean onTouch(View v, MotionEvent event) {
-                switch (event.getAction()){
-                    case MotionEvent.ACTION_DOWN:
-                        direita();
-                        return true;
-                    //break;
-                    case MotionEvent.ACTION_UP:
-                        connectedThread.write('S');
-                        break;
-                }
-                return false;
-            }
-        });
-        btnE.setOnTouchListener(new View.OnTouchListener() {
-            @Override
-            public boolean onTouch(View v, MotionEvent event) {
-                switch (event.getAction()){
-                    case MotionEvent.ACTION_DOWN:
-                        esquerda();
-                        return true;
-                    //break;
-                    case MotionEvent.ACTION_UP:
-                        connectedThread.write('S');
-                        break;
-                }
-                return false;
-            }
-        });
-        ivAtivaVoz.setOnClickListener(new View.OnClickListener() {
+        //configura evento da image view para enviar comando de voz
+        speakImageView.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                if (ativaFalar){
-                    ativaFalar = false;
-                    ivAtivaVoz.setImageResource(R.drawable.ic_volume_desativado);
-                }else
-                {
-                    ativaFalar = true;
-                    ivAtivaVoz.setImageResource(R.drawable.ic_volume_ativado);
+                startVoiceRecognitionActivity();
+            }
+        });
+
+        //configura evento da image view para ativar comandos por voz
+        voiceControlImageView.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                if (voiceControlActive){
+                    voiceControlActive = false;
+                    voiceControlImageView.setImageResource(R.drawable.ic_volume_desativado);
+                } else {
+                    voiceControlActive = true;
+                    voiceControlImageView.setImageResource(R.drawable.ic_volume_ativado);
                 }
             }
         });
@@ -302,7 +325,7 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
     private void enableBluetoothAdapterAndProgress() {
         if (!mBluetoothAdapter.isEnabled()) {
             Intent enableBluetoothIntent = new Intent(ACTION_REQUEST_ENABLE);
-            startActivityForResult(enableBluetoothIntent, REQUEST_ENABLE_BT);
+            startActivityForResult(enableBluetoothIntent, REQUEST_ENABLE_BLUETOOTH);
         } else {
             progress();
         }
@@ -310,55 +333,69 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        if (requestCode == REQUEST_ENABLE_BT) {
+        if (requestCode == REQUEST_ENABLE_BLUETOOTH) {
             if (resultCode == RESULT_OK) {
                 progress();
             } else {
                 finishApp("O Bluetooth precisa estar habilitado para utilizar o aplicativo.");
             }
         }
-        if (requestCode == REQUEST_CODE && resultCode == RESULT_OK) {
-            ArrayList<String> matches = data.getStringArrayListExtra( RecognizerIntent.EXTRA_RESULTS);
-
-            for(int i = 0; i < matches.size();i++) {
-                if(matches.get(i).equalsIgnoreCase("Conectar")) {
-                    ConverterTextoVoz.texto(TextoMensagemVoz.FN_CONECTANDO,mTts,ativaFalar);
-                    ConnectThread connectThread = new ConnectThread(carrinho);
-                    connectThread.start();
-                    break;
-                }
-                if(matches.get(i).equalsIgnoreCase("em frente")) {
-                    frente();
-
-                    break;
-                }
-                if(matches.get(i).equalsIgnoreCase("para traz")) {
-                    traz();
-
-                    break;
-                }
-                if(matches.get(i).equalsIgnoreCase("parar")) {
-                    connectedThread.write('S');
-
-                    break;
-                }
-                if(matches.get(i).equalsIgnoreCase("direita")) {
-                    direita();
-                    break;
-                }
-                if(matches.get(i).equalsIgnoreCase("esquerda")) {
-                    esquerda();
-                    break;
-                }
-                if(matches.get(i).equalsIgnoreCase("sair")) {
-                    this.finish();
-                    break;
-                }
-
-
+        if (requestCode == REQUEST_VOICE_CONTROL) {
+            if (resultCode == RESULT_OK) {
+                dealWithVoiceCommand(data);
             }
         }
 
+    }
+
+    /**
+     * Trata dos comandos de voz enviados pelo usuário
+     * @param data Intent
+     */
+    private void dealWithVoiceCommand(Intent data) {
+        ArrayList<String> matches = data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
+
+        for (int i = 0; i < matches.size(); i++) {
+            if (matches.get(i).equalsIgnoreCase("Conectar")) {
+                ConverterTextoVoz.texto(TextoMensagemVoz.MENSAGEM_VOZ_CONECTANDO, textToSpeech, voiceControlActive);
+                ConnectThread connectThread = new ConnectThread(carrinho);
+                connectThread.start();
+                break;
+            }
+
+            if (matches.get(i).equalsIgnoreCase("em frente")) {
+                goForward();
+
+                break;
+            }
+
+            if (matches.get(i).equalsIgnoreCase("para traz")) {
+                goBackward();
+
+                break;
+            }
+
+            if (matches.get(i).equalsIgnoreCase("parar")) {
+                connectedThread.write(STOP_COMMAND);
+
+                break;
+            }
+
+            if (matches.get(i).equalsIgnoreCase("direita")) {
+                goToTheRight();
+                break;
+            }
+
+            if (matches.get(i).equalsIgnoreCase("esquerda")) {
+                goToTheLeft();
+                break;
+            }
+
+            if (matches.get(i).equalsIgnoreCase("sair")) {
+                this.finish();
+                break;
+            }
+        }
     }
 
     /**
@@ -405,7 +442,7 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
         listViewDispositivos.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
             public void onItemClick(AdapterView<?> adapterView, View view, int i, long l) {
-                ConverterTextoVoz.texto(TextoMensagemVoz.FN_CONECTANDO,mTts,ativaFalar);
+                ConverterTextoVoz.texto(TextoMensagemVoz.MENSAGEM_VOZ_CONECTANDO, textToSpeech, voiceControlActive);
                 ConnectThread connectThread = new ConnectThread(carrinho);
                 connectThread.start();
             }
@@ -428,50 +465,125 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
         return null;
     }
 
-    @Override
-    public void onStart() {
-        super.onStart();
 
-        // ATTENTION: This was auto-generated to implement the App Indexing API.
-        // See https://g.co/AppIndexing/AndroidStudio for more information.
-        client.connect();
-        Action viewAction = Action.newAction(
-                Action.TYPE_VIEW, // TODO: choose an action type.
-                "Main Page", // TODO: Define a title for the content shown.
-                // TODO: If you have web page content that matches this app activity's content,
-                // make sure this auto-generated web page URL is correct.
-                // Otherwise, set the URL to null.
-                Uri.parse("http://host/path"),
-                // TODO: Make sure this auto-generated app URL is correct.
-                Uri.parse("android-app://com.cadastro.projeto.maquinadeguerra/http/host/path")
-        );
-        AppIndex.AppIndexApi.start(client, viewAction);
+    //Iniciar a tela de comando por voz
+    private void startVoiceRecognitionActivity() {
+        Intent intent = new Intent(ACTION_RECOGNIZE_SPEECH);
+        intent.putExtra(EXTRA_LANGUAGE_MODEL, LANGUAGE_MODEL_FREE_FORM);
+        intent.putExtra(EXTRA_PROMPT, "Fala para a Máquina de guerra o que fazer!!!");
+
+        startActivityForResult(intent, REQUEST_VOICE_CONTROL);
     }
 
-    @Override
-    public void onStop() {
-        super.onStop();
+    /**
+     * Modifica a ImageView de intensidade de luz de acordo com o valor enviado pelo parâmetro String
+     * @param valor String
+     */
+    private void verificarPeriodoDia(String valor){
+        if (!valor.isEmpty()) {
+            int intensidade = Integer.valueOf(valor);
+            ImageView ivIntLuz = (ImageView) findViewById(R.id.ivIntLuz);
 
-        // ATTENTION: This was auto-generated to implement the App Indexing API.
-        // See https://g.co/AppIndexing/AndroidStudio for more information.
-        Action viewAction = Action.newAction(
-                Action.TYPE_VIEW, // TODO: choose an action type.
-                "Main Page", // TODO: Define a title for the content shown.
-                // TODO: If you have web page content that matches this app activity's content,
-                // make sure this auto-generated web page URL is correct.
-                // Otherwise, set the URL to null.
-                Uri.parse("http://host/path"),
-                // TODO: Make sure this auto-generated app URL is correct.
-                Uri.parse("android-app://com.cadastro.projeto.maquinadeguerra/http/host/path")
-        );
-        AppIndex.AppIndexApi.end(client, viewAction);
-        client.disconnect();
+            if (intensidade < 600 ) {
+                if (!lastImage.equals(DIA)) {
+                    ivIntLuz.setImageResource(R.drawable.ic_dia);
+                    lastImage = DIA;
+                }
+
+            } else if (intensidade > 600 && intensidade < 1000) {
+                if (!lastImage.equals(TARDE)) {
+                    ivIntLuz.setImageResource(R.drawable.ic_tarde);
+                    lastImage = TARDE;
+                }
+            } else {
+                if (!lastImage.equals(NOITE)) {
+                    ivIntLuz.setImageResource(R.drawable.ic_noite);
+                    lastImage = NOITE;
+                }
+            }
+        }
     }
 
-    @Override
-    public void onInit(int status) {
-
+    /**
+     * Configura a visibilidade dos botões de comando do carrinho
+     * @param conectado boolean
+     */
+    private void setButtonsVisibility(boolean conectado){
+        if (!conectado) {
+            forwardImageView.setVisibility(INVISIBLE);
+            backwardImageView.setVisibility(INVISIBLE);
+            stopImageView.setVisibility(INVISIBLE);
+            leftImageView.setVisibility(INVISIBLE);
+            rightImageView.setVisibility(INVISIBLE);
+            lightIntensityImageView.setVisibility(INVISIBLE);
+        } else {
+            forwardImageView.setVisibility(VISIBLE);
+            backwardImageView.setVisibility(VISIBLE);
+            stopImageView.setVisibility(VISIBLE);
+            leftImageView.setVisibility(VISIBLE);
+            rightImageView.setVisibility(VISIBLE);
+            lightIntensityImageView.setVisibility(VISIBLE);
+        }
     }
+
+    /**
+     * Método resposável por enviar o comando de ir para frente para o arduino através da thread
+     * que mantém o socket de conexão com o arduino, além de enviar a mensagem o comando é
+     * convertido para mensagem de voz através da engine TextToSpeech
+     */
+    private void goForward(){
+        ConverterTextoVoz.texto(MENSAGEM_VOZ_IR_PARA_FRENTE, textToSpeech, voiceControlActive);
+        connectedThread.write(FORWARD_COMMAND);
+    }
+
+    /**
+     * Método resposável por enviar o comando de ir para trás para o arduino através da thread
+     * que mantém o socket de conexão com o arduino, além de enviar a mensagem o comando é
+     * convertido para mensagem de voz através da engine TextToSpeech
+     */
+    private void goBackward(){
+        connectedThread.write(BACKWARD_COMMAND);
+        ConverterTextoVoz.texto(MENSAGEM_VOZ_IR_PARA_TRAS, textToSpeech, voiceControlActive);
+    }
+
+    /**
+     * Método resposável por enviar o comando de ir para a direita para o arduino através da thread
+     * que mantém o socket de conexão com o arduino, além de enviar a mensagem o comando é
+     * convertido para mensagem de voz através da engine TextToSpeech
+     */
+    private void goToTheRight(){
+        connectedThread.write(RIGHT_COMMAND);
+        ConverterTextoVoz.texto(MENSAGEM_VOZ_IR_PARA_DIREITA, textToSpeech, voiceControlActive);
+    }
+
+    /**
+     * Método resposável por enviar o comando de ir para a esquerda para o arduino através da thread
+     * que mantém o socket de conexão com o arduino, além de enviar a mensagem o comando é
+     * convertido para mensagem de voz através da engine TextToSpeech
+     */
+    private void goToTheLeft(){
+        connectedThread.write(LEFT_COMMAND);
+        ConverterTextoVoz.texto(MENSAGEM_VOZ_IR_PARA_ESQUERDA, textToSpeech, voiceControlActive);
+    }
+
+
+    /**
+     * Obtém referências para as instâncias das image views que serão utilizadas para controlar a tela
+     */
+    private void obtainImageViewInstances() {
+        forwardImageView = (ImageView) findViewById(R.id.ivF);
+        backwardImageView = (ImageView) findViewById(R.id.ivB);
+        stopImageView = (ImageView) findViewById(R.id.ivS);
+        leftImageView = (ImageView) findViewById(R.id.ivE);
+        rightImageView = (ImageView) findViewById(R.id.ivD);
+        speakImageView = (ImageView) findViewById(R.id.ivFalar);
+        voiceControlImageView = (ImageView) findViewById(R.id.ivAtivaVoz);
+        lightIntensityImageView = (ImageView) findViewById(R.id.ivIntLuz);
+    }
+
+
+    @Override
+    public void onInit(int status) {}
 
     /**
      * Classe interna que representa a thread que fará a conexão com o dispositivo bia bluetooth
@@ -517,7 +629,7 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
                         manageConnectedSocket(mmSocket);
                     } catch (Exception connectException2) {
                         Log.e(TAG, "Não foi possível estabelecer uma conexão");
-                        ConverterTextoVoz.texto(TextoMensagemVoz.ERRO_CONECTAR_CARRINHO,mTts,ativaFalar);
+                        ConverterTextoVoz.texto(TextoMensagemVoz.MENSAGEM_VOZ_ERRO_AO_CONECTAR, textToSpeech, voiceControlActive);
                     }
                 }
             } catch (IOException e) {
@@ -614,90 +726,4 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
             }
         }
     }
-
-    //Iniciar a tela de comando por voz
-    private void startVoiceRecognitionActivity() {
-        Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
-        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
-        intent.putExtra(RecognizerIntent.EXTRA_PROMPT, "Fala para a Máquina de guera o que fazer!!!");
-        startActivityForResult(intent, REQUEST_CODE);
-    }
-
-    //Alterar a imagem de acordo com a intensidade de luz
-    private void verificarPeriodoDia(String valor){
-        if (valor != "") {
-            int intansidade = Integer.valueOf(valor);
-            ImageView ivIntLuz = (ImageView) findViewById(R.id.ivIntLuz);
-
-            if (intansidade < 600 ) {
-                if (!ultimaImagem.equals("Dia")) {
-                    ivIntLuz.setImageResource(R.drawable.ic_dia);
-                    ultimaImagem = "Dia";
-                }
-
-            }else
-            if (intansidade > 600 )
-                if (intansidade < 1000) {
-                    if (!ultimaImagem.equals("Tarde")) {
-                        ivIntLuz.setImageResource(R.drawable.ic_tarde);
-                        ultimaImagem = "Tarde";
-                    }
-                } else {
-                    if (intansidade >= 1000) {
-                        if (!ultimaImagem.equals("Noite")) {
-                            ivIntLuz.setImageResource(R.drawable.ic_noite);
-                            ultimaImagem = "Noite";
-                        }
-                    }
-                }
-
-        }
-    }
-    //Tornar os componentes visíveis ao conectar
-    private void ativaAposConectar(boolean conectado){
-
-        if (!conectado) {
-            btnF.setVisibility(View.INVISIBLE);
-            btnB.setVisibility(View.INVISIBLE);
-            btnS.setVisibility(View.INVISIBLE);
-            btnE.setVisibility(View.INVISIBLE);
-            btnD.setVisibility(View.INVISIBLE);
-            //falar.setVisibility(View.INVISIBLE);
-            ivIntLuz.setVisibility(View.INVISIBLE);
-        }else {
-            btnF.setVisibility(View.VISIBLE);
-            btnB.setVisibility(View.VISIBLE);
-            btnS.setVisibility(View.VISIBLE);
-            btnE.setVisibility(View.VISIBLE);
-            btnD.setVisibility(View.VISIBLE);
-
-            //falar.setVisibility(View.VISIBLE);
-            ivIntLuz.setVisibility(View.VISIBLE);
-        }
-
-
-    }
-
-    //Comandos para gerencias a direção do carriho
-    private void frente(){
-        ConverterTextoVoz.texto(TextoMensagemVoz.FN_FRENTE,mTts,ativaFalar);
-        connectedThread.write('F');
-    }
-    //Comandos para gerencias a direção do carriho
-    private void traz(){
-        connectedThread.write('B');
-        ConverterTextoVoz.texto(TextoMensagemVoz.FN_RE,mTts,ativaFalar);
-    }
-    //Comandos para gerencias a direção do carriho
-    private void direita(){
-        connectedThread.write('R');
-        ConverterTextoVoz.texto(TextoMensagemVoz.FN_DIREITA,mTts,ativaFalar);
-    }
-    //Comandos para gerencias a direção do carriho
-    private void esquerda(){
-        connectedThread.write('L');
-        ConverterTextoVoz.texto(TextoMensagemVoz.FN_ESQUERDA,mTts,ativaFalar);
-    }
-
-
 }
